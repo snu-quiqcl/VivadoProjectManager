@@ -1,0 +1,10 @@
+$USER_NAME=[Environment]::UserName;
+$condaHookPath = 'C:\Users\' + $USER_NAME + '\anaconda3\shell\condabin\conda-hook.ps1';
+. $condaHookPath; 
+conda activate base;
+$PSScriptRoot = Split-Path -Parent -Path $MyInvocation.MyCommand.Definition;
+cd $PSScriptRoot;
+echo $PSScriptRoot;
+pip uninstall -y VivadoPmgr;
+pip install .;
+python setup.py clean;
