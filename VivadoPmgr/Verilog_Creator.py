@@ -54,7 +54,7 @@ class TVM:
         """
         cls.tcl_code = ""
 
-    def add_files(self) -> None:
+    def add_files(self):
         """
         this function adds files to the project
         """
@@ -62,7 +62,7 @@ class TVM:
         for file in self.files:
             TVM.tcl_code += f"add_files -norecurse {{{file}}}\n"
 
-    def add_constraints(self) -> None:
+    def add_constraints(self):
         """
         This function adds constraints to the project
         """
@@ -71,7 +71,7 @@ class TVM:
             f"{TVM.constraints}\n"
         )
 
-    def create_prj(self) -> None:
+    def create_prj(self):
         """
         This function creates the project
         """
@@ -80,7 +80,7 @@ class TVM:
             f"${{project_dir}}/${{project_name}} -part {TVM.part_name}\n"
         )
 
-    def set_board(self) -> None:
+    def set_board(self):
         """
         This function sets the board
         """
@@ -106,7 +106,7 @@ class IPMaker:
         for key, value in kwargs.items():
             setattr(self, key, value)
 
-    def set_config(self) -> None:
+    def set_config(self):
         """ This function sets the configuration of the IP """
         TVM.tcl_code += f"create_ip -dir {self.target_path}"
         for tcl_option in self.tcl_options:
@@ -142,7 +142,7 @@ class BDCellMaker:
         for key, value in kwargs.items():
             setattr(self, key, value)
 
-    def set_config(self) -> None:
+    def set_config(self):
         """
         This function sets the configuration of the BD Cell
         """
@@ -158,15 +158,16 @@ class BDCellMaker:
                      in self.config.items()]
                 ) + "]"
             )
-
-        reg = "reg0" if "xilinx.com:user" in self.vlnv else "Reg"
-
         if "xilinx.com:user" in self.vlnv and self.config:
             TVM.tcl_code += f" [get_bd_cells {self.module_name}]\n"
 
         elif self.config:
             TVM.tcl_code += f" ${self.module_name}\n"
 
+    def connect_manual(self):
+        """
+        This function sets the connections of the BD Cell
+        """
         for victim, target in self.ports.items():
             if "/" in target:
                 TVM.connection_code += (
@@ -187,38 +188,84 @@ class BDCellMaker:
                 f" [get_bd_intf_pins {target}] [get_bd_intf_pins "
                 f"{self.module_name}/{victim}]\n"
             )
+
+    def connect_main_interconnect(self):
+        """
+        This function set teh interconnect of the BD Cell
+        """
+        _multi_master = False
         if hasattr(self,"axi"):
+            _multi_master = check_for_nested_dict(self.axi)
             self.axi_address = TVM.axi_offset
-            range_ = int(self.axi.get("range"),16)
-            TVM.connection_code += (
-                f"connect_bd_intf_net -intf_net {TVM.axi_interconnect}_M"
-                f"{str(TVM.axi_number).zfill(2)}_AXI [get_bd_intf_pins"
-                f" {self.module_name}/s_axi] [get_bd_intf_pins"
-                f" {TVM.axi_interconnect}/"
-                f"M{str(TVM.axi_number).zfill(2)}_AXI]\n"
-            )
-            if "offset" in self.axi:
-                offset = self.axi.get("offset")
-                TVM.address_code += (
-                    f"assign_bd_address -offset {offset} -range "
-                    f"{hex(range_).upper()} -target_address_space "
-                    f"[get_bd_addr_spaces {TVM.CPU}/Data] [get_bd_addr_segs "
-                    f"{self.module_name}/s_axi/{reg}] -force\n"
-                )
+            if _multi_master:
+                data = self.axi.get(TVM.CPU + "/Data")
+                range_ = int(data.get("range"),16)
             else:
-                TVM.address_code += (
-                    f"assign_bd_address -offset {hex(TVM.axi_offset).upper()}"
-                    f" -range {hex(range_).upper()} -target_address_space"
-                    f" [get_bd_addr_spaces {TVM.CPU}/Data] [get_bd_addr_segs"
-                    f" {self.module_name}/s_axi/{reg}] -force\n"
-                )
-                TVM.axi_offset += range_
-            if (("xilinx.com:user" in self.vlnv) and
-                (self.vlnv != "xilinx.com:user:TimeController") and
-                (self.vlnv != "xilinx.com:user:InterruptController")
-            ):
-                TVM.user_bdcell_w_axi.append(TVM.axi_number)
+                self.connect_interconnect(TVM.axi_interconnect, TVM.axi_number)
+                range_ = int(self.axi.get("range"),16)
+            TVM.axi_offset += range_
             TVM.axi_number += 1
+
+    def connect_interconnect(self, interconnect_name, axi_num):
+        """
+        This function connect actual interconnect to the BD Cell
+        """
+        # Connect interconnect module manually
+        if (
+            "xilinx.com:ip:axi_interconnect" in self.vlnv or
+            "xilinx.com:ip:ddr4" in self.vlnv
+        ):
+            return
+        TVM.connection_code += (
+            f"connect_bd_intf_net -intf_net {interconnect_name}_M"
+            f"{str(axi_num).zfill(2)}_AXI [get_bd_intf_pins"
+            f" {self.module_name}/s_axi] [get_bd_intf_pins"
+            f" {interconnect_name}/"
+            f"M{str(axi_num).zfill(2)}_AXI]\n"
+        )
+        if (("xilinx.com:user" in self.vlnv) and
+            (self.vlnv != "xilinx.com:user:TimeController") and
+            (self.vlnv != "xilinx.com:user:InterruptController")
+        ):
+            TVM.user_bdcell_w_axi.append(TVM.axi_number)
+
+    def set_address(self):
+        """
+        This function sets the address of the BD Cell
+        """
+        _multi_master = False
+        if hasattr(self,"axi"):
+            _multi_master = check_for_nested_dict(self.axi)
+            if _multi_master:
+                for _master, data in self.axi.items():
+                    self.set_address_value(_master, data)
+            else:
+                self.set_address_value(TVM.CPU + "/Data", self.axi)
+
+    def set_address_value(self, master, data, offset = None):
+        """
+        This function sets the actual address value
+        """
+        if hasattr(data,"address_space"):
+            reg = data["address_space"]
+        elif "xilinx.com:user" in self.vlnv:
+            reg = "s_axi/reg0"
+        elif "xilinx.com:ip:ddr4" in self.vlnv:
+            reg = "C0_DDR4_MEMORY_MAP/C0_DDR4_ADDRESS_BLOCK"
+        else:
+            reg = "s_axi/Reg"
+
+        range_ = int(data.get("range"),16)
+        if "offset" in data:
+            offset = data.get("offset")
+        else:
+            offset = hex(self.axi_address)
+        TVM.address_code += (
+            f"assign_bd_address -offset {offset} -range "
+            f"{hex(range_).upper()} -target_address_space "
+            f"[get_bd_addr_spaces {master}] [get_bd_addr_segs "
+            f"{self.module_name}/{reg}] -force\n"
+        )
 
 # pylint: disable=too-many-instance-attributes
 class VerilogMaker(TVM):
@@ -248,7 +295,7 @@ class VerilogMaker(TVM):
         )
         self.tcl_path = os.path.join(self.target_path,self.name+".tcl")
 
-    def set_top(self) -> None:
+    def set_top(self):
         """
         This function sets the top module
         """
@@ -263,14 +310,14 @@ class VerilogMaker(TVM):
                 " [current_fileset]\n"
             )
 
-    def add_ip(self) -> None:
+    def add_ip(self):
         """
         This function adds IPs to the project
         """
         for ip in self.ip:
             ip.set_config()
 
-    def generate_customized_ip(self) -> None:
+    def generate_customized_ip(self):
         """
         This function generates customized IPs
         """
@@ -283,7 +330,7 @@ class VerilogMaker(TVM):
             "update_ip_catalog\n"
         )
 
-    def copy_files(self) -> None:
+    def copy_files(self):
         """
         This function copies the files to the target path
         """
@@ -298,7 +345,7 @@ class VerilogMaker(TVM):
             ).replace("\\","/") for file in self.files
         ]
 
-    def set_prj_name(self) -> None:
+    def set_prj_name(self):
         """
         This function sets the project name and directory
         """
@@ -307,7 +354,7 @@ class VerilogMaker(TVM):
             f"set project_dir \"{self.target_path}\"\n"
         )
 
-    def make_tcl(self) -> None:
+    def make_tcl(self):
         """
         This function creates the tcl file
         """
@@ -329,7 +376,12 @@ class VerilogMaker(TVM):
         TVM.clear_tcl_code()
         delete_dump()
 
-def set_global_namespace(json_file) -> None:
+def check_for_nested_dict(d)->bool:
+    for key, value in d.items():
+        if isinstance(value, dict):
+            return True
+    return False
+def set_global_namespace(json_file):
     """
     This function sets the global namespace
     """
@@ -351,20 +403,18 @@ def create_verilog_maker(json_file: str) -> VerilogMaker:
         vm.ip.append(ip_maker)
     return vm
 
-def ensure_directory_exists(directory_path) -> None:
+def ensure_directory_exists(directory_path):
     """ This function ensures that the directory exists and remove it if it exists"""
     if os.path.exists(directory_path):
         shutil.rmtree(directory_path)
         logging.warning("Directory %s is removed.",directory_path)
-        try:
-            os.makedirs(directory_path)
-            logging.warning("Directory %s created.",directory_path)
-        except OSError as error:
-            logging.warning("Error creating directory %s: %s", directory_path, error)
-    else:
-        logging.warning("Error occured during making %s.",directory_path)
+    try:
+        os.makedirs(directory_path)
+        logging.warning("Directory %s created.",directory_path)
+    except OSError as error:
+        logging.warning("Error creating directory %s: %s", directory_path, error)
 
-def run_vivado_tcl(tcl_path) -> None:
+def run_vivado_tcl(tcl_path):
     """
     This function runs the Vivado tcl
     """
@@ -381,7 +431,7 @@ def run_vivado_tcl(tcl_path) -> None:
     logging.warning(stderr if stderr else "Vivado ended with no error")
     kill_process(process)
 
-def kill_process(process) -> None:
+def kill_process(process):
     """
     This function kills the process
     """
@@ -394,7 +444,7 @@ def kill_process(process) -> None:
     elif process.poll() == 1:
         logging.error("Process is abnormally finished...")
 
-def delete_dump() -> None:
+def delete_dump():
     """
     This function deletes the dump files
     """
@@ -409,7 +459,7 @@ def delete_dump() -> None:
         shutil.rmtree(os.path.join(current_working_directory,".Xil"))
         logging.warning(".Xil is deleted")
 
-def main() -> None:
+def main():
     """
     This is the main function
     """

@@ -195,8 +195,14 @@ class RFSoCMaker(TVM):
         for intf, option in self.interface.items():
             mode = option["mode"]
             vlnv = option["vlnv"]
-            TVM.tcl_code += f"create_bd_intf_port -mode {mode}"
-            TVM.tcl_code += f" -vlnv {vlnv} {intf}\n"
+            if "xilinx.com:user" in vlnv:
+                width = int(option["config"]["width"])
+                _dir = "O" if mode == "Master" else "I"
+                TVM.tcl_code += f"set {intf} [ create_bd_port -dir "
+                TVM.tcl_code += f"{_dir} {intf} -from {width-1} -to 0 ]\n"
+            else:
+                TVM.tcl_code += f"create_bd_intf_port -mode {mode}"
+                TVM.tcl_code += f" -vlnv {vlnv} {intf}\n"
 
     def make_clk_ports(self) -> None:
         """
@@ -583,13 +589,19 @@ class RFSoCMaker(TVM):
         self.make_input_ports()
         self.make_interface()
         self.make_clk_ports()
+
         for bd_cell in self.bd_cell:
             bd_cell.set_config()
-        self.connect_ports()
+            bd_cell.connect_manual()
+            bd_cell.connect_main_interconnect()
+            bd_cell.set_address()
+
         if self.auto_connection:
             self.connect_axi_interface()
             self.connect_rtio_interface()
-            self.set_address()
+
+        self.connect_ports()
+        self.set_address()
         self.start_implementation()
         self.start_gui()
         with open(os.path.join(
