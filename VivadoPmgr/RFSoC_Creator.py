@@ -195,7 +195,7 @@ class RFSoCMaker(TVM):
         for intf, option in self.interface.items():
             mode = option["mode"]
             vlnv = option["vlnv"]
-            if "xilinx.com:user" in vlnv:
+            if "xilinx.com:user:vector" in vlnv:
                 width = int(option["config"]["width"])
                 _dir = "O" if mode == "Master" else "I"
                 TVM.tcl_code += f"set {intf} [ create_bd_port -dir "
@@ -203,6 +203,13 @@ class RFSoCMaker(TVM):
             else:
                 TVM.tcl_code += f"create_bd_intf_port -mode {mode}"
                 TVM.tcl_code += f" -vlnv {vlnv} {intf}\n"
+                if "config" in option:
+                    TVM.tcl_code += "set_property -dict [list "
+                    config_strings = [
+                        f"CONFIG.{key} {{{val}}}" for key, val in option["config"].items()
+                    ]
+                    TVM.tcl_code += " ".join(config_strings)
+                    TVM.tcl_code += f"] [get_bd_intf_ports {intf}]\n"
 
     def make_clk_ports(self) -> None:
         """
@@ -325,7 +332,7 @@ class RFSoCMaker(TVM):
             f" [get_bd_pins {self.CPU}/pl_clk0]" +
             "".join(
                 [
-                    f" [get_bd_pins {bd_cell.module_name}/s_axi_aclk]" 
+                    f" [get_bd_pins {bd_cell.module_name}/s_axi_aclk]"
                     if (
                         hasattr(bd_cell,"axi") and
                         (not "xilinx.com:user" in bd_cell.vlnv) or
@@ -593,7 +600,8 @@ class RFSoCMaker(TVM):
         for bd_cell in self.bd_cell:
             bd_cell.set_config()
             bd_cell.connect_manual()
-            bd_cell.connect_main_interconnect()
+            if self.auto_connection:
+                bd_cell.connect_main_interconnect()
             bd_cell.set_address()
 
         if self.auto_connection:
@@ -608,7 +616,8 @@ class RFSoCMaker(TVM):
             self.target_path, self.project_name+".tcl"), "w", encoding="utf-8"
         ) as file:
             file.write(TVM.tcl_code)
-        self.make_module_address_map()
+        if self.auto_connection:
+            self.make_module_address_map()
         run_vivado_tcl(self.tcl_path)
         TVM.clear_tcl_code()
         delete_dump()
