@@ -193,17 +193,31 @@ class BDCellMaker:
         """
         This function set teh interconnect of the BD Cell
         """
-        _multi_master = False
+        # Connect axi module
         if hasattr(self,"axi"):
-            _multi_master = check_for_nested_dict(self.axi)
             self.axi_address = TVM.axi_offset
-            if _multi_master:
+            if check_for_nested_dict(self.axi):
                 data = self.axi.get(TVM.CPU + "/Data")
                 range_ = int(data.get("range"),16)
+                if "offset" not in data:
+                    TVM.axi_offset += range_
             else:
                 self.connect_interconnect(TVM.axi_interconnect, TVM.axi_number)
                 range_ = int(self.axi.get("range"),16)
-            TVM.axi_offset += range_
+                if "offset" not in self.axi:
+                    TVM.axi_offset += range_
+        # Connect interconnect
+        if (
+            "xilinx.com:ip:axi_interconnect" in self.vlnv and
+            self.module_name != "axi_interconnect_0"
+        ):
+            TVM.connection_code += (
+                f"connect_bd_intf_net -intf_net {TVM.axi_interconnect}_M"
+                f"{str(TVM.axi_number).zfill(2)}_AXI [get_bd_intf_pins"
+                f" {self.module_name}/S00_AXI] [get_bd_intf_pins"
+                f" {TVM.axi_interconnect}/"
+                f"M{str(TVM.axi_number).zfill(2)}_AXI]\n"
+            )
             TVM.axi_number += 1
 
     def connect_interconnect(self, interconnect_name, axi_num):
@@ -228,15 +242,14 @@ class BDCellMaker:
             (self.vlnv != "xilinx.com:user:InterruptController")
         ):
             TVM.user_bdcell_w_axi.append(TVM.axi_number)
+        TVM.axi_number += 1
 
     def set_address(self):
         """
         This function sets the address of the BD Cell
         """
-        _multi_master = False
         if hasattr(self,"axi"):
-            _multi_master = check_for_nested_dict(self.axi)
-            if _multi_master:
+            if check_for_nested_dict(self.axi):
                 for _master, data in self.axi.items():
                     self.set_address_value(_master, data)
             else:

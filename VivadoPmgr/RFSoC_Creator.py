@@ -115,7 +115,10 @@ class RFSoCMaker(TVM):
         """
         for v in self.verilog_maker:
             for ip in v.ip:
-                if ip.name == "fifo_generator":
+                if (
+                    ip.name == "fifo_generator" and
+                    ip.module_name in ("rtob_fifo_generator_1", "fifo_generator_0")
+                ):
                     fifo_depth = getattr(self,v.name + "_fifo_depth")
                     ip.config["Input_Depth"] = fifo_depth
                     ip.config["Output_Depth"] = fifo_depth
@@ -313,6 +316,17 @@ class RFSoCMaker(TVM):
         TVM.tcl_code += (
             "".join(
                 [
+                    f" [get_bd_pins {bd_cell.module_name}/S00_ARESETN]"
+                    if (
+                        "xilinx.com:ip:axi_interconnect" in bd_cell.vlnv and
+                        (not self.axi_interconnect in bd_cell.module_name)
+                    ) else "" for bd_cell in self.bd_cell
+                ]
+            )
+        )
+        TVM.tcl_code += (
+            "".join(
+                [
                     (f" [get_bd_pins {self.axi_interconnect}/"
                     f"M{str(i).zfill(2)}_ARESETN]")
                     if not i in TVM.user_bdcell_w_axi else ""
@@ -338,6 +352,17 @@ class RFSoCMaker(TVM):
                         (not "xilinx.com:user" in bd_cell.vlnv) or
                         (bd_cell.vlnv == "xilinx.com:user:TimeController") or
                         (bd_cell.vlnv == "xilinx.com:user:InterruptController")
+                    ) else "" for bd_cell in self.bd_cell
+                ]
+            )
+        )
+        TVM.tcl_code += (
+            "".join(
+                [
+                    f" [get_bd_pins {bd_cell.module_name}/S00_ACLK]"
+                    if (
+                        "xilinx.com:ip:axi_interconnect" in bd_cell.vlnv and
+                        (not self.axi_interconnect in bd_cell.module_name)
                     ) else "" for bd_cell in self.bd_cell
                 ]
             )
@@ -547,8 +572,8 @@ class RFSoCMaker(TVM):
                 f"{self.project_name}.gen/sources_1/bd/{self.project_name}_blk/"
                 f"hdl/{self.project_name}_blk_wrapper.v\n"
                 f"launch_runs impl_1 -to_step write_bitstream -jobs {self.implementation}\n"
-                "write_hw_platform -fixed -include_bit -force -file "
-                f"{self.target_path}/{self.project_name}/{self.project_name}.xsa\n"
+                # "write_hw_platform -fixed -include_bit -force -file "
+                # f"{self.target_path}/{self.project_name}/{self.project_name}.xsa\n"
             )
 
     def make_module_address_map(self) -> None:
@@ -647,6 +672,9 @@ def make_module_map(bd_cell: BDCellMaker) -> dict[str,dict[str,str]]:
     if "xilinx.com:user:InputController" in getattr(bd_cell,"vlnv"):
         data["module"] = "lolenc.bsp.src.module.InputController"
         data["class"] = "InputController"
+    if "xilinx.com:user:WaveCacheController" in getattr(bd_cell,"vlnv"):
+        data["module"] = "lolenc.bsp.src.module.WaveCacheController"
+        data["class"] = "WaveCacheController"
     return data
 
 def create_rfsoc_maker(json_file: str) -> RFSoCMaker:
@@ -690,7 +718,8 @@ def create_rfsoc_maker(json_file: str) -> RFSoCMaker:
                 "xilinx.com:user:DDS_Controller" in getattr(bd_cell_maker,"vlnv") or
                 "xilinx.com:user:TTL_Controller" in getattr(bd_cell_maker,"vlnv") or
                 "xilinx.com:user:TTLx8_Controller" in getattr(bd_cell_maker,"vlnv") or
-                "xilinx.com:user:InputController" in getattr(bd_cell_maker,"vlnv")
+                "xilinx.com:user:InputController" in getattr(bd_cell_maker,"vlnv") or
+                "xilinx.com:user:WaveCacheController" in getattr(bd_cell_maker,"vlnv")
             ):
                 setattr(bd_cell_maker,"channel",channel)
                 channel += 1
