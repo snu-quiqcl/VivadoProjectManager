@@ -524,6 +524,7 @@ class RFSoCMaker(TVM):
                         "xilinx.com:user:InputController",
                         "xilinx.com:user:TTL_Controller",
                         "xilinx.com:user:SwitchController",
+                        "xilinx.com:user:WaveCacheController"
                     ]
                 ):
                     # Connect Almost Empty
@@ -600,6 +601,10 @@ class RFSoCMaker(TVM):
                     bd_cell_maker
                 )
             if "xilinx.com:user:InputController" in getattr(bd_cell_maker,"vlnv"):
+                module_addr_map[bd_cell_maker.module_name] = make_module_map(
+                    bd_cell_maker
+                )
+            if "xilinx.com:user:WaveCacheController" in getattr(bd_cell_maker,"vlnv"):
                 module_addr_map[bd_cell_maker.module_name] = make_module_map(
                     bd_cell_maker
                 )
