@@ -22,6 +22,7 @@ from VivadoPmgr.Verilog_Creator import (
     ensure_directory_exists,
     set_global_namespace,
     create_verilog_maker,
+    check_for_nested_dict
 )
 
 FIFO_FULL_BUFFER = 8
@@ -69,6 +70,7 @@ class RFSoCMaker(TVM):
         self.implementation: int = 0
         self.gui: bool = True
         self.auto_connection: bool = True
+        self.event_controller_option: bool = False
 
         # AXI configuration
         self.axi_offset: str = None
@@ -88,6 +90,7 @@ class RFSoCMaker(TVM):
         # Reset Modules
         self.main_reset: str = ""
         self.dram_reset: str = ""
+        self.inst_cache_reset: str = ""
 
         self.timecontroller: str = ""
         self.rfdc: str = ""
@@ -306,8 +309,7 @@ class RFSoCMaker(TVM):
                     f" [get_bd_pins {bd_cell.module_name}/s_axi_aresetn]"
                      if ( hasattr(bd_cell,"axi") and
                          (not "xilinx.com:user" in bd_cell.vlnv) or
-                         (bd_cell.vlnv == "xilinx.com:user:TimeController") or
-                         (bd_cell.vlnv == "xilinx.com:user:InterruptController")
+                         (bd_cell.vlnv == "xilinx.com:user:TimeController")
                      )
                      else "" for bd_cell  in self.bd_cell
                  ]
@@ -324,21 +326,57 @@ class RFSoCMaker(TVM):
                 ]
             )
         )
-        TVM.tcl_code += (
-            "".join(
-                [
-                    (f" [get_bd_pins {self.axi_interconnect}/"
-                    f"M{str(i).zfill(2)}_ARESETN]")
-                    if not i in TVM.user_bdcell_w_axi else ""
-                    for i in range(self.total_axi_number)
-                ]
+        if self.event_controller_option:
+            TVM.tcl_code += (
+                "".join(
+                    [
+                        (f" [get_bd_pins {self.axi_interconnect}/"
+                        f"M{str(i).zfill(2)}_ARESETN]")
+                        if (
+                            not i in TVM.user_bdcell_w_axi and
+                            not i == TVM.interrupt_controller_bdcell_w_axi
+                        ) else ""
+                        for i in range(self.total_axi_number)
+                    ]
+                )
             )
-        )
+        else:
+            TVM.tcl_code += (
+                "".join(
+                    [
+                        (f" [get_bd_pins {self.axi_interconnect}/"
+                        f"M{str(i).zfill(2)}_ARESETN]")
+                        if not i in TVM.user_bdcell_w_axi else ""
+                        for i in range(self.total_axi_number)
+                    ]
+                )
+            )
         TVM.tcl_code += (
             f" [get_bd_pins {self.axi_interconnect}/S00_ARESETN]"
             f" [get_bd_pins {self.axi_interconnect}/ARESETN]"
-            f" [get_bd_pins {self.clk_wiz}/resetn]\n"
+            f" [get_bd_pins {self.clk_wiz}/resetn]"
         )
+        if self.event_controller_option:
+            TVM.tcl_code += (
+                "\n"
+                f"connect_bd_net -net {self.inst_cache_reset}_peripheral_aresetn"
+                f" [get_bd_pins {self.axi_interconnect}/M{str(TVM.interrupt_controller_bdcell_w_axi).zfill(2)}_ARESETN]"
+                f" [get_bd_pins {self.inst_cache_reset}/peripheral_aresetn]"
+                f" [get_bd_pins {self.interruptcontroller}/s_axi_aresetn]"
+                f" [get_bd_pins {self.interruptcontroller}/m_axi_dram_aresetn]"
+                f" [get_bd_pins {self.interruptcontroller}/m_axi_rtio_0_aresetn]"
+                f" [get_bd_pins {self.interruptcontroller}/m_axi_rtio_1_aresetn]"
+                f" [get_bd_pins {self.interruptcontroller}/m_axi_rtio_2_aresetn]"
+                f" [get_bd_pins {self.interruptcontroller}/m_axi_rtio_3_aresetn]"
+                f" [get_bd_pins {self.axi_interconnect}/S01_ARESETN]"
+                f" [get_bd_pins {self.axi_interconnect}/S02_ARESETN]"
+                f" [get_bd_pins {self.axi_interconnect}/S03_ARESETN]"
+                f" [get_bd_pins {self.axi_interconnect}/S04_ARESETN]\n"
+            )
+        else:
+            TVM.tcl_code += (
+                f" [get_bd_pins {self.interruptcontroller}/s_axi_aresetn]\n"
+            )
 
         TVM.tcl_code += (
             f"connect_bd_net -net {self.CPU}_s_axi_aclk"
@@ -350,8 +388,7 @@ class RFSoCMaker(TVM):
                     if (
                         hasattr(bd_cell,"axi") and
                         (not "xilinx.com:user" in bd_cell.vlnv) or
-                        (bd_cell.vlnv == "xilinx.com:user:TimeController") or
-                        (bd_cell.vlnv == "xilinx.com:user:InterruptController")
+                        (bd_cell.vlnv == "xilinx.com:user:TimeController")
                     ) else "" for bd_cell in self.bd_cell
                 ]
             )
@@ -367,19 +404,57 @@ class RFSoCMaker(TVM):
                 ]
             )
         )
-        TVM.tcl_code += (
-            "".join(
-                [
-                    (f" [get_bd_pins {self.axi_interconnect}"
-                    f"/M{str(i).zfill(2)}_ACLK]") if not i in TVM.user_bdcell_w_axi
-                    else "" for i in range(self.total_axi_number)
-                ]
+        if self.event_controller_option:
+            TVM.tcl_code += (
+                "".join(
+                    [
+                        (f" [get_bd_pins {self.axi_interconnect}"
+                        f"/M{str(i).zfill(2)}_ACLK]") if (
+                            not i in TVM.user_bdcell_w_axi and
+                            not i == TVM.interrupt_controller_bdcell_w_axi
+                        )
+                        else "" for i in range(self.total_axi_number)
+                    ]
+                )
             )
-        )
+        else:
+            TVM.tcl_code += (
+                "".join(
+                    [
+                        (f" [get_bd_pins {self.axi_interconnect}"
+                        f"/M{str(i).zfill(2)}_ACLK]") if not i in TVM.user_bdcell_w_axi
+                        else "" for i in range(self.total_axi_number)
+                    ]
+                )
+            )
         TVM.tcl_code += (
             f" [get_bd_pins {self.main_reset}/slowest_sync_clk]"
             f" [get_bd_pins {self.axi_interconnect}/ACLK]"
-            f" [get_bd_pins {self.axi_interconnect}/S00_ACLK]\n"
+            f" [get_bd_pins {self.axi_interconnect}/S00_ACLK]"
+        )
+        if self.event_controller_option:
+            TVM.tcl_code += (
+                "\n"
+                f"connect_bd_net -net {self.CPU}_pl_clk1"
+                f" [get_bd_pins {self.CPU}/saxihp0_fpd_aclk]"
+                f" [get_bd_pins {self.CPU}/pl_clk1]"
+                f" [get_bd_pins {self.axi_interconnect}/M{str(TVM.interrupt_controller_bdcell_w_axi).zfill(2)}_ACLK]"
+                f" [get_bd_pins {self.axi_interconnect}/S01_ACLK]"
+                f" [get_bd_pins {self.axi_interconnect}/S02_ACLK]"
+                f" [get_bd_pins {self.axi_interconnect}/S03_ACLK]"
+                f" [get_bd_pins {self.axi_interconnect}/S04_ACLK]"
+                f" [get_bd_pins {self.interruptcontroller}/s_axi_aclk]"
+                f" [get_bd_pins {self.interruptcontroller}/m_axi_dram_aclk]"
+                f" [get_bd_pins {self.interruptcontroller}/m_axi_rtio_0_aclk]"
+                f" [get_bd_pins {self.interruptcontroller}/m_axi_rtio_1_aclk]"
+                f" [get_bd_pins {self.interruptcontroller}/m_axi_rtio_2_aclk]"
+                f" [get_bd_pins {self.interruptcontroller}/m_axi_rtio_3_aclk]\n"
+            )
+        else:
+            TVM.tcl_code += (
+                f" [get_bd_pins {self.interruptcontroller}/s_axi_aclk]\n"
+            )
+        TVM.tcl_code += (
             f"connect_bd_net -net {self.main_reset}_ext_reset_in"
             f" [get_bd_pins {self.CPU}/pl_resetn0]"
             f" [get_bd_pins {self.main_reset}/ext_reset_in]\n"
@@ -388,6 +463,30 @@ class RFSoCMaker(TVM):
             f"{self.CPU}/M_AXI_HPM0_FPD]"
             f" [get_bd_intf_pins {self.axi_interconnect}/S00_AXI]\n"
         )
+        if self.event_controller_option:
+            TVM.tcl_code += (
+                f"connect_bd_intf_net -intf_net {self.axi_interconnect}_S01_AXI"
+                f" [get_bd_intf_pins {self.interruptcontroller}/m_axi_rtio_0]"
+                f" [get_bd_intf_pins {self.axi_interconnect}/S01_AXI]\n"
+                f"connect_bd_intf_net -intf_net {self.axi_interconnect}_S02_AXI"
+                f" [get_bd_intf_pins {self.interruptcontroller}/m_axi_rtio_1]"
+                f" [get_bd_intf_pins {self.axi_interconnect}/S02_AXI]\n"
+                f"connect_bd_intf_net -intf_net {self.axi_interconnect}_S03_AXI"
+                f" [get_bd_intf_pins {self.interruptcontroller}/m_axi_rtio_2]"
+                f" [get_bd_intf_pins {self.axi_interconnect}/S03_AXI]\n"
+                f"connect_bd_intf_net -intf_net {self.axi_interconnect}_S04_AXI"
+                f" [get_bd_intf_pins {self.interruptcontroller}/m_axi_rtio_3]"
+                f" [get_bd_intf_pins {self.axi_interconnect}/S04_AXI]\n"
+            )
+            TVM.tcl_code += (
+                f"connect_bd_intf_net -intf_net {self.CPU}_S_AXI_HP0_FPD"
+                f" [get_bd_intf_pins {self.CPU}/S_AXI_HP0_FPD]"
+                f" [get_bd_intf_pins {self.interruptcontroller}/m_axi_dram]\n"
+            )
+            TVM.tcl_code += (
+                r"set_property -dict [list CONFIG.FREQ_HZ {299997009}]"
+                f" [get_bd_intf_pins {self.interruptcontroller}/m_axi_dram]\n"
+            )
 
     def connect_rtio_interface(self) -> None:
         """
@@ -632,6 +731,23 @@ class RFSoCMaker(TVM):
             bd_cell.connect_manual()
             if self.auto_connection:
                 bd_cell.connect_main_interconnect()
+                if self.event_controller_option and hasattr(bd_cell,"axi"):
+                    if check_for_nested_dict(bd_cell.axi):
+                        for _master, data in bd_cell.axi.items():
+                            bd_cell.set_address_value(_master, data)
+                    else:
+                        bd_cell.set_address_value(
+                            f"{self.interruptcontroller}/m_axi_rtio_0", bd_cell.axi
+                        )
+                        bd_cell.set_address_value(
+                            f"{self.interruptcontroller}/m_axi_rtio_1", bd_cell.axi
+                        )
+                        bd_cell.set_address_value(
+                            f"{self.interruptcontroller}/m_axi_rtio_2", bd_cell.axi
+                        )
+                        bd_cell.set_address_value(
+                            f"{self.interruptcontroller}/m_axi_rtio_3", bd_cell.axi
+                        )
             bd_cell.set_address()
 
         if self.auto_connection:
@@ -711,6 +827,9 @@ def create_rfsoc_maker(json_file: str) -> RFSoCMaker:
             if ("xilinx.com:ip:proc_sys_reset" in getattr(bd_cell_maker,"vlnv") and
                 bd_cell_maker.module_name == "dram_reset_0"):
                 setattr(rm,"dram_reset",bd_cell_maker.module_name)
+            if ("xilinx.com:ip:proc_sys_reset" in getattr(bd_cell_maker,"vlnv") and
+                bd_cell_maker.module_name == "inst_cache_reset_0"):
+                setattr(rm,"inst_cache_reset",bd_cell_maker.module_name)
             if "xilinx.com:ip:usp_rf_data_converter" in getattr(bd_cell_maker,"vlnv"):
                 setattr(rm,"rfdc",bd_cell_maker.module_name)
             if "xilinx.com:ip:clk_wiz:6.0" in getattr(bd_cell_maker,"vlnv"):
@@ -769,6 +888,13 @@ def main() -> None:
         default=True,
         help="Auto Connection option"
     )
+    parser.add_argument(
+        "-e",
+        "--event_controller_option",
+        type=lambda x: (str(x).lower() == 'true'),
+        default=False,
+        help="Event Controller option"
+    )
     args = parser.parse_args()
 
     configuration: str = args.config if args.config else "configuration.json"
@@ -776,12 +902,15 @@ def main() -> None:
     implementation: int = args.implementation
     gui: bool = args.gui
     auto_connection: bool = args.auto_connection
+    event_controller_option: bool = args.event_controller_option
     logging.warning("GUI Option: %s",gui)
     logging.warning("Auto Connection Option: %s",auto_connection)
+    logging.warning("Event Controller Option: %s",event_controller_option)
 
     set_global_namespace(configuration)
     rfsoc_maker = create_rfsoc_maker(soc_json)
     setattr(rfsoc_maker,"implementation",implementation)
     setattr(rfsoc_maker,"gui",gui)
     setattr(rfsoc_maker,"auto_connection",auto_connection)
+    setattr(rfsoc_maker,"event_controller_option",event_controller_option)
     rfsoc_maker.make_tcl()

@@ -35,6 +35,7 @@ class TVM:
     address_code: str = ""
     total_axi_number: int = 0
     user_bdcell_w_axi: list[int] = []
+    interrupt_controller_bdcell_w_axi: int = None
 
     def __init__(self):
         pass
@@ -242,6 +243,8 @@ class BDCellMaker:
             (self.vlnv != "xilinx.com:user:InterruptController")
         ):
             TVM.user_bdcell_w_axi.append(TVM.axi_number)
+        elif "xilinx.com:user:InterruptController" in self.vlnv:
+            TVM.interrupt_controller_bdcell_w_axi = TVM.axi_number
         TVM.axi_number += 1
 
     def set_address(self):
