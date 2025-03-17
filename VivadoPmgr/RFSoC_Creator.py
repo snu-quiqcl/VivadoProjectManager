@@ -484,7 +484,7 @@ class RFSoCMaker(TVM):
                 f" [get_bd_intf_pins {self.interruptcontroller}/m_axi_dram]\n"
             )
             TVM.tcl_code += (
-                r"set_property -dict [list CONFIG.FREQ_HZ {299997009}]"
+                r"set_property -dict [list CONFIG.FREQ_HZ {249997498}]"
                 f" [get_bd_intf_pins {self.interruptcontroller}/m_axi_dram]\n"
             )
 
