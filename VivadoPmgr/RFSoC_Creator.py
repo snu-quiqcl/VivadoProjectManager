@@ -487,6 +487,10 @@ class RFSoCMaker(TVM):
                 r"set_property -dict [list CONFIG.FREQ_HZ {249997498}]"
                 f" [get_bd_intf_pins {self.interruptcontroller}/m_axi_dram]\n"
             )
+            TVM.tcl_code += (
+                f"assign_bd_address -target_address_space /{self.interruptcontroller}/m_axi_dram"
+                f" [get_bd_addr_segs {self.CPU}/SAXIGP2/HP0_DDR_HIGH] -force\n"
+            )
 
     def connect_rtio_interface(self) -> None:
         """
