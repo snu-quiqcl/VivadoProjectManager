@@ -63,6 +63,7 @@ class RFSoCMaker(TVM):
         self.TTLx8_Controller_fifo_depth: Union[str,None] = None
         self.InputController_fifo_depth: Union[str,None] = None
         self.SwitchController_fifo_depth: Union[str,None] = None
+        self.SPI_Controller_fifo_depth: Union[str,None] = None
         self.json_path: list[str]
         self.bd_cell: list[BDCellMaker] = []
         self.verilog_maker: list[VerilogMaker] = []
@@ -627,7 +628,8 @@ class RFSoCMaker(TVM):
                         "xilinx.com:user:InputController",
                         "xilinx.com:user:TTL_Controller",
                         "xilinx.com:user:SwitchController",
-                        "xilinx.com:user:WaveCacheController"
+                        "xilinx.com:user:WaveCacheController",
+                        "xilinx.com:user:SPI_Controller",
                     ]
                 ):
                     # Connect Almost Empty
@@ -704,6 +706,10 @@ class RFSoCMaker(TVM):
                     bd_cell_maker
                 )
             if "xilinx.com:user:InputController" in getattr(bd_cell_maker,"vlnv"):
+                module_addr_map[bd_cell_maker.module_name] = make_module_map(
+                    bd_cell_maker
+                )
+            if "xilinx.com:user:SPI_Controller" in getattr(bd_cell_maker,"vlnv"):
                 module_addr_map[bd_cell_maker.module_name] = make_module_map(
                     bd_cell_maker
                 )
@@ -800,6 +806,9 @@ def make_module_map(bd_cell: BDCellMaker) -> dict[str,dict[str,str]]:
     if "xilinx.com:user:WaveCacheController" in getattr(bd_cell,"vlnv"):
         data["module"] = "lolenc.bsp.src.module.WaveCacheController"
         data["class"] = "WaveCacheController"
+    if "xilinx.com:user:SPI_Controller" in getattr(bd_cell,"vlnv"):
+        data["module"] = "lolenc.bsp.src.module.SPI_Controller"
+        data["class"] = "SPI_Controller"
     return data
 
 def create_rfsoc_maker(json_file: str) -> RFSoCMaker:
@@ -847,7 +856,8 @@ def create_rfsoc_maker(json_file: str) -> RFSoCMaker:
                 "xilinx.com:user:TTL_Controller" in getattr(bd_cell_maker,"vlnv") or
                 "xilinx.com:user:TTLx8_Controller" in getattr(bd_cell_maker,"vlnv") or
                 "xilinx.com:user:InputController" in getattr(bd_cell_maker,"vlnv") or
-                "xilinx.com:user:WaveCacheController" in getattr(bd_cell_maker,"vlnv")
+                "xilinx.com:user:WaveCacheController" in getattr(bd_cell_maker,"vlnv") or
+                "xilinx.com:user:SPI_Controller" in getattr(bd_cell_maker,"vlnv")
             ):
                 setattr(bd_cell_maker,"channel",channel)
                 channel += 1
