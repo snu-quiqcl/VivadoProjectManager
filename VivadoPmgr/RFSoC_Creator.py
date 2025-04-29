@@ -38,7 +38,7 @@ class RFSoCMaker(TVM):
     """
     def __init__(self, **kwargs):
         """
-        
+
         project_name: block design name
         DDS_Controller_fifo_depth: DDS module fifo depth
         TTL_Controller_fifo_depth: TTL_Controller module fifo depth
@@ -51,7 +51,7 @@ class RFSoCMaker(TVM):
         CPU: name of Zynq CPU
         reset: reset module name
         clk_wiz: PLL module name
-        timecontroller: timecontroller module name ( which makes 
+        timecontroller: timecontroller module name ( which makes
              64 bit counter)
         rfdc: RFDC module name(which includes DAC and ADC)
 
@@ -63,7 +63,7 @@ class RFSoCMaker(TVM):
         self.TTLx8_Controller_fifo_depth: Union[str,None] = None
         self.InputController_fifo_depth: Union[str,None] = None
         self.SwitchController_fifo_depth: Union[str,None] = None
-        self.SPI_Controller_fifo_depth: Union[str,None] = None
+        self.DAC_Controller_fifo_depth: Union[str,None] = None
         self.json_path: list[str]
         self.bd_cell: list[BDCellMaker] = []
         self.verilog_maker: list[VerilogMaker] = []
@@ -143,8 +143,8 @@ class RFSoCMaker(TVM):
 
     def set_possible_fifo_depth(self) -> None:
         """
-        set possible fifo depth from given configuration file. This is 
-        specified in 
+        set possible fifo depth from given configuration file. This is
+        specified in
         "block_diagram ": {
             "{module name}_fifo_depth": value of fifo_depth
         }
@@ -169,8 +169,8 @@ class RFSoCMaker(TVM):
 
     def make_output_ports(self) -> None:
         """
-        Make output ports from configuration file. This is specified in 
-        "block_diagram": { 
+        Make output ports from configuration file. This is specified in
+        "block_diagram": {
             "output_ports": [list of output ports]
         }
         """
@@ -179,7 +179,7 @@ class RFSoCMaker(TVM):
 
     def make_input_ports(self) -> None:
         """
-        Make input ports from configuration file. This is specified in 
+        Make input ports from configuration file. This is specified in
         "block_diagram": {
             "input_ports": [list of input ports]
         }
@@ -220,7 +220,7 @@ class RFSoCMaker(TVM):
 
     def make_clk_ports(self) -> None:
         """
-        Make external clock ports from configuration file. This is specified in 
+        Make external clock ports from configuration file. This is specified in
         "block_diagram": {
             "clk": {
                 "{clock_name}": {
@@ -251,8 +251,8 @@ class RFSoCMaker(TVM):
         if self.file:
             TVM.tcl_code += (
                 "set_property  ip_repo_paths {" +
-                " ".join([f"{file}" for file in self.file]) + 
-                " } [current_project]\nupdate_ip_catalog\n" 
+                " ".join([f"{file}" for file in self.file]) +
+                " } [current_project]\nupdate_ip_catalog\n"
             )
 
     def set_block_diagram(self) -> None:
@@ -270,25 +270,25 @@ class RFSoCMaker(TVM):
 
     def connect_ports(self) -> None:
         """
-        This method make TCL script which connect ports of IP 
+        This method make TCL script which connect ports of IP
         modules.
-        
+
         Returns
         -------
         None
-        
+
         """
         TVM.tcl_code += TVM.connection_code
 
     def set_address(self) -> None:
         """
-        This method make TCL script which assign axi address to all of IP 
-        modules. Address assign code is separated since 
-        
+        This method make TCL script which assign axi address to all of IP
+        modules. Address assign code is separated since
+
         Returns
         -------
         None
-        
+
         """
         TVM.tcl_code += TVM.address_code
 
@@ -296,11 +296,11 @@ class RFSoCMaker(TVM):
         """
         This module connects AXI interface ports. Note that s_axi_aclk and
         rtio_clk is different clock so two of them must be seperated.
-        
+
         Returns
         -------
         None
-        
+
         """
         TVM.tcl_code += (
             f"connect_bd_net -net {self.main_reset}_peripheral_aresetn"
@@ -495,16 +495,16 @@ class RFSoCMaker(TVM):
 
     def connect_rtio_interface(self) -> None:
         """
-        This connect RTIO interface ports. There are auto_start, counter, 
+        This connect RTIO interface ports. There are auto_start, counter,
         rtio_clk, rtio_resetn. auto_start pin is came from TimeController
-        module and it is connected to all of rtio modules. counter port is 
+        module and it is connected to all of rtio modules. counter port is
         also came from TimeController module and it is connected to all of rtio
         modules. rtio_clk is came from RFDC IP, so it should check whether RFDC
-        IP is exist and if not, it does not connect rtio_clk so you should 
+        IP is exist and if not, it does not connect rtio_clk so you should
         connect rtio_clk manually. rtio_resetn is connected to RFDC IP since
         saxi_resetn is in the s_axi_clk clock region which is different from
         rtio_clk(dac0_clk) clock region. clk_wiz module is used to make 4 times
-        faster clock which is provided to OSERDES3 IP of TTLx8_Controller. 
+        faster clock which is provided to OSERDES3 IP of TTLx8_Controller.
 
         Returns
         -------
@@ -518,7 +518,7 @@ class RFSoCMaker(TVM):
                     [f" [get_bd_pins {bd_cell.module_name}/auto_start]"
                     if "xilinx.com:user" in bd_cell.vlnv else "" for bd_cell
                     in self.bd_cell]) +
-                "\n" 
+                "\n"
             )
             TVM.tcl_code += (
                 f"connect_bd_net -net {self.timecontroller}_counter"+
@@ -526,7 +526,7 @@ class RFSoCMaker(TVM):
                     [f" [get_bd_pins {bd_cell.module_name}/counter]"
                     if "xilinx.com:user" in bd_cell.vlnv else "" for bd_cell
                     in self.bd_cell]) +
-                "\n" 
+                "\n"
             )
         if self.rfdc != "":
             TVM.tcl_code += f"connect_bd_net -net {self.rfdc}_clk_dac0"
@@ -629,7 +629,7 @@ class RFSoCMaker(TVM):
                         "xilinx.com:user:TTL_Controller",
                         "xilinx.com:user:SwitchController",
                         "xilinx.com:user:WaveCacheController",
-                        "xilinx.com:user:SPI_Controller",
+                        "xilinx.com:user:DAC_Controller",
                     ]
                 ):
                     # Connect Almost Empty
@@ -652,8 +652,8 @@ class RFSoCMaker(TVM):
 
     def start_gui(self) -> None:
         """
-        It makes vivado GUI run after creation of block diagram. Note that 
-        you should make wrapper in TCL code or turn on vivado GUI and save 
+        It makes vivado GUI run after creation of block diagram. Note that
+        you should make wrapper in TCL code or turn on vivado GUI and save
         block diagram. If not, there would be blank block diagram.
 
         Returns
@@ -709,7 +709,7 @@ class RFSoCMaker(TVM):
                 module_addr_map[bd_cell_maker.module_name] = make_module_map(
                     bd_cell_maker
                 )
-            if "xilinx.com:user:SPI_Controller" in getattr(bd_cell_maker,"vlnv"):
+            if "xilinx.com:user:DAC_Controller" in getattr(bd_cell_maker,"vlnv"):
                 module_addr_map[bd_cell_maker.module_name] = make_module_map(
                     bd_cell_maker
                 )
@@ -806,9 +806,9 @@ def make_module_map(bd_cell: BDCellMaker) -> dict[str,dict[str,str]]:
     if "xilinx.com:user:WaveCacheController" in getattr(bd_cell,"vlnv"):
         data["module"] = "lolenc.bsp.src.module.WaveCacheController"
         data["class"] = "WaveCacheController"
-    if "xilinx.com:user:SPI_Controller" in getattr(bd_cell,"vlnv"):
-        data["module"] = "lolenc.bsp.src.module.SPI_Controller"
-        data["class"] = "SPI_Controller"
+    if "xilinx.com:user:DAC_Controller" in getattr(bd_cell,"vlnv"):
+        data["module"] = "lolenc.bsp.src.module.DAC_Controller"
+        data["class"] = "DAC_Controller"
     return data
 
 def create_rfsoc_maker(json_file: str) -> RFSoCMaker:
@@ -857,7 +857,7 @@ def create_rfsoc_maker(json_file: str) -> RFSoCMaker:
                 "xilinx.com:user:TTLx8_Controller" in getattr(bd_cell_maker,"vlnv") or
                 "xilinx.com:user:InputController" in getattr(bd_cell_maker,"vlnv") or
                 "xilinx.com:user:WaveCacheController" in getattr(bd_cell_maker,"vlnv") or
-                "xilinx.com:user:SPI_Controller" in getattr(bd_cell_maker,"vlnv")
+                "xilinx.com:user:DAC_Controller" in getattr(bd_cell_maker,"vlnv")
             ):
                 setattr(bd_cell_maker,"channel",channel)
                 channel += 1
@@ -876,7 +876,7 @@ def main() -> None:
         )
     )
     parser.add_argument(
-        "-v", "--verbose", action="store_true", 
+        "-v", "--verbose", action="store_true",
         help="Increase output verbosity"
     )
     parser.add_argument("-c", "--config", help="Configuration file name")
