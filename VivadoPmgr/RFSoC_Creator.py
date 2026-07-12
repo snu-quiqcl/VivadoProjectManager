@@ -71,6 +71,8 @@ class RFSoCMaker(TVM):
         self.gui: bool = True
         self.auto_connection: bool = True
         self.event_controller_option: bool = False
+        self.event_dram_segment: str = "HP0_DDR_HIGH"
+        self.device_db_filename: str = "device_db.json"
 
         # AXI configuration
         self.axi_offset: str = None
@@ -116,22 +118,39 @@ class RFSoCMaker(TVM):
         """
         override verilog code configuration from rfsoc configuration
         """
-        for v in self.verilog_maker:
-            for ip in v.ip:
-                if (
-                    ip.name == "fifo_generator" and
-                    ip.module_name in ("rtob_fifo_generator_1", "fifo_generator_0")
-                ):
-                    fifo_depth = getattr(self,v.name + "_fifo_depth")
-                    ip.config["Input_Depth"] = fifo_depth
-                    ip.config["Output_Depth"] = fifo_depth
-                    ip.config["Full_Threshold_Assert_Value"] = str(
-                        int(fifo_depth) - FIFO_FULL_BUFFER
-                    )
-                    ip.config["Full_Threshold_Negate_Value"] = str(
-                        int(fifo_depth) - FIFO_FULL_BUFFER
-                    )
-            v.make_tcl()
+        board_constraints = TVM.constraints
+        try:
+            # Board-level pin constraints belong only to the top SoC project,
+            # not to each packaged custom IP project.
+            TVM.constraints = None
+            for v in self.verilog_maker:
+                for ip in v.ip:
+                    if (
+                        ip.name == "fifo_generator" and
+                        ip.module_name in (
+                            "rtob_fifo_generator_1", "fifo_generator_0"
+                        )
+                    ):
+                        fifo_depth = getattr(self,v.name + "_fifo_depth")
+                        count_width = str((int(fifo_depth) - 1).bit_length())
+                        ip.config["Input_Depth"] = fifo_depth
+                        ip.config["Output_Depth"] = fifo_depth
+                        ip.config["Full_Threshold_Assert_Value"] = str(
+                            int(fifo_depth) - FIFO_FULL_BUFFER
+                        )
+                        ip.config["Full_Threshold_Negate_Value"] = str(
+                            int(fifo_depth) - FIFO_FULL_BUFFER
+                        )
+                        for key in (
+                            "Data_Count_Width",
+                            "Write_Data_Count_Width",
+                            "Read_Data_Count_Width",
+                        ):
+                            if key in ip.config:
+                                ip.config[key] = count_width
+                v.make_tcl()
+        finally:
+            TVM.constraints = board_constraints
 
         for bd_cell in self.bd_cell:
             if bd_cell.module_name == self.axi_interconnect:
@@ -354,7 +373,10 @@ class RFSoCMaker(TVM):
         TVM.tcl_code += (
             f" [get_bd_pins {self.axi_interconnect}/S00_ARESETN]"
             f" [get_bd_pins {self.axi_interconnect}/ARESETN]"
-            f" [get_bd_pins {self.clk_wiz}/resetn]"
+            + (
+                f" [get_bd_pins {self.clk_wiz}/resetn]"
+                if self.clk_wiz else ""
+            )
         )
         if self.event_controller_option:
             TVM.tcl_code += (
@@ -489,7 +511,8 @@ class RFSoCMaker(TVM):
             )
             TVM.tcl_code += (
                 f"assign_bd_address -target_address_space /{self.interruptcontroller}/m_axi_dram"
-                f" [get_bd_addr_segs {self.CPU}/SAXIGP2/HP0_DDR_HIGH] -force\n"
+                f" [get_bd_addr_segs {self.CPU}/SAXIGP2/"
+                f"{self.event_dram_segment}] -force\n"
             )
 
     def connect_rtio_interface(self) -> None:
@@ -711,9 +734,14 @@ class RFSoCMaker(TVM):
                 module_addr_map[bd_cell_maker.module_name] = make_module_map(
                     bd_cell_maker
                 )
-            module_address_map_json: str = os.path.join(os.getcwd(),"device_db.json")
+        module_address_map_json = self.device_db_filename
+        if not os.path.isabs(module_address_map_json):
+            module_address_map_json = os.path.join(
+                os.getcwd(), module_address_map_json
+            )
         with open(module_address_map_json, "w", encoding="utf-8") as file:
             json.dump(module_addr_map, file, indent=4)
+            file.write("\n")
 
     def make_tcl(self) -> None:
         """

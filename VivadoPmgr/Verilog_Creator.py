@@ -67,6 +67,8 @@ class TVM:
         """
         This function adds constraints to the project
         """
+        if not TVM.constraints:
+            return
         TVM.tcl_code += (
             f"add_files -fileset constrs_1 -norecurse "
             f"{TVM.constraints}\n"
@@ -262,7 +264,7 @@ class BDCellMaker:
         """
         This function sets the actual address value
         """
-        if hasattr(data,"address_space"):
+        if "address_space" in data:
             reg = data["address_space"]
         elif "xilinx.com:user" in self.vlnv:
             reg = "s_axi/reg0"
@@ -444,8 +446,13 @@ def run_vivado_tcl(tcl_path):
         out = out.replace("\n","")
         logging.warning(out)
     _, stderr = process.communicate()
+    return_code = process.returncode
     logging.warning(stderr if stderr else "Vivado ended with no error")
     kill_process(process)
+    if return_code != 0:
+        raise RuntimeError(
+            f"Vivado exited with code {return_code} while running {tcl_path}"
+        )
 
 def kill_process(process):
     """
@@ -457,8 +464,10 @@ def kill_process(process):
         logging.warning("Process is killed...")
     elif process.poll() == 0:
         logging.warning("Process is normally finished...")
-    elif process.poll() == 1:
-        logging.error("Process is abnormally finished...")
+    else:
+        logging.error(
+            "Process is abnormally finished with code %s...", process.poll()
+        )
 
 def delete_dump():
     """

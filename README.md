@@ -119,3 +119,55 @@ You can make zcu104 project and empty block diagram with below command. Vivado w
 ```
 MakeZCU104Project -c configuration.json -f soc.json
 ```
+
+### ZCU104 FDM test project
+
+The ZCU104 generator can build the non-RF lolenc path with the integrated
+Event Controller. The ZCU104 board preset configures PS DDR, PL0 supplies the
+125 MHz RTIO clock, and PL1 supplies the 250 MHz FDM clock. Enable the Event
+Controller explicitly and pass a non-zero implementation job count to build a
+bitstream:
+
+```
+MakeZCU104Project -c configuration_ZCU104.json -f ZCU104_FDM_Test.json -e true -i 8 -g false
+```
+
+`-i 0` creates and validates the Vivado project without starting
+implementation. The ZCU104 design uses PS DDR through `S_AXI_HP0_FPD`; it does
+not require RFDC, DDS, AWG, SwitchController, WaveCacheController, or PL DDR.
+This profile is FDM-only, so `-a` and `-e` must remain `true`.
+
+## Making an MYD-CZU5EV-V2 Project
+
+The MYD-CZU5EV-V2 generator builds the same non-RF FDM path for the
+`xczu5ev-sfvc784-2-i` device. It does not require a Vivado `board_part`:
+set `board_name` to `null` and `board_preset` to `false`. The built-in PS
+profile configures the V2 MIO peripherals, 4 GiB 64-bit DDR4, a 125 MHz RTIO
+clock, and a 250 MHz FDM clock.
+
+```
+MakeMYDCZU5EVProject -c configuration_MYD_CZU5EV_V2.json -f MYD_CZU5EV_FDM_Test.json -e true -i 8 -g false
+```
+
+`-i 0` creates and validates the project without implementation. The FDM
+controller uses `S_AXI_HP0_FPD` and the lower 2 GiB `HP0_DDR_LOW` segment,
+which is compatible with its current 32-bit address path. Keep the short
+`MYD5_FDM` project name on Windows to avoid Vivado 2020.2 path-length limits.
+
+MYIR's reference PS preset can be used instead of the built-in profile by
+adding the following optional field to the SoC JSON `block_diagram` object:
+
+```json
+"ps_preset_tcl": "C:/path/to/MYD-CZU5EV-V2-preset.tcl"
+```
+
+MYIR lists its FPGA sample/reference package on the public
+[MYD-CZU4EV/5EV SDK page](https://d.myirtech.com/MYD-CZU4EV_5EV/). A standalone
+Vivado `board.xml` package was not identified, so this generator selects the
+exact device part and applies either the built-in PS profile or the vendor
+preset Tcl.
+
+The generator applies the preset first, then restores the FDM AXI, interrupt,
+and PL-clock settings. A successful FPGA build validates the PL design, but
+booting and physical DDR operation still require MYIR-compatible boot software
+and testing on the target board.

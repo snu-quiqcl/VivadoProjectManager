@@ -35,6 +35,8 @@ setup(
             'MakeVivadoProject=VivadoPmgr.Verilog_Creator:main',
             'MakeRFSoCProject=VivadoPmgr.RFSoC_Creator:main',
             'MakeZCU104Project=VivadoPmgr.ZCU104_Creator:main',
+            ('MakeMYDCZU5EVProject='
+             'VivadoPmgr.MYIR_CZU5EV_Creator:main'),
         ],
     },
     install_requires=[
